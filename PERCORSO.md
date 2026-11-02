@@ -28,15 +28,15 @@ Matteo scrive personalmente il codice Python/rclpy, salvo richieste esplicite di
 - Lettura TF della pinza e primo piano di posa a Z +0.03 m: SUCCESS (1), 0.018 s, 10 punti (guida 30.7–31.2).
 - Verifica del punto finale del piano tramite FK e vincoli riuscita (32.7).
 - ExecuteTrajectory nel componente separato MotionExecution: invio, accettazione, feedback e risultato ROS 4 / MoveIt SUCCESS (1) confermati (34.17).
-- PoseVerifier: campione registrato 6.138111 ms dopo il riferimento, FK della posa raggiunta entro 2.914 mm dal target, valid=True, due vincoli True, zero contatti e notifica positiva al planner (35.13). Test controllato del timeout reale ancora da completare.
+- PoseVerifier: campione registrato 6.138111 ms dopo il riferimento, FK della posa raggiunta entro 2.914 mm dal target, valid=True, due vincoli True, zero contatti e notifica positiva al planner (35.13). Timeout isolato reale poi riuscito in ROS Jazzy CI: 2.001 s, una notifica False, altri 3 s senza duplicati (40).
 - Tavolo e tre cubi colorati confermati funzionanti dall'utente.
 - File open_bin.stl preparato e verificato geometricamente dall'assistente; conversione in Mesh ROS scritta da Matteo e verificata con 84 vertici, 28 triangoli e ultimo triangolo [81, 82, 83].
 
 ## Punto corrente - fase 6, prima posa eseguita e verificata
 
-Fase 5 conclusa al checkpoint 28.5; non ripetere quelle prove senza nuovi problemi. Il percorso positivo della fase 6 arriva ora fino alla verifica della posa raggiunta dopo ExecuteTrajectory: nuovo campione, FK e vincoli originali confermati (35.13). Prossimo passo: test isolato del timeout di PoseVerifier senza altri movimenti. Proposta aggiornata in 37.13: dopo il riferimento operativo/TCP e la verifica del modello, iniziare Gazebo prima del ciclo completo di manipolazione. Presa e manipolazione non ancora implementate.
+Fase 5 conclusa al checkpoint 28.5; non ripetere quelle prove senza nuovi problemi. Il percorso positivo della fase 6 arriva fino alla verifica della posa raggiunta dopo ExecuteTrajectory (35.13). L'assistente ha completato implementazione e test automatici di timeout e TCP: PR #1 di Matteo7100/RoboCell, 42 test unitari e 4 ROS passati, modelli e mesh coerenti (guida 40). Prossimo controllo: lanciare in WSL timeout_probe e tcp_probe con i comandi di 40; poi iniziare Gazebo prima del ciclo completo di manipolazione. Presa e manipolazione non ancora implementate.
 
-La guida conserva la costruzione di MotionExecution in 34 e di PoseVerifier in 35, compresi codice fornito su richiesta, revisione dell'allegato e test locali. Il positivo reale del 2 novembre e in 35.13. L'assistente completa i due blocchi successivi; Matteo riprende a scrivere il codice da Gazebo. La repository condivisa e Matteo7100/RoboCell, letta al commit d0a779fb13b6f9faf677d2486586d5b6dc2f7c91. La creazione del ramo remoto e rifiutata dal connettore con 403; gh locale non autenticato. Copia locale preparata nella sottocartella RoboCell: timeout_probe, helper geometrici e report del modello, 36 test unitari passati; timeout ROS reale e definizione specifica del TCP ancora da completare. Servono accesso di pubblicazione e dump del modello attivo; dettagli e comandi WSL in guida 39 e RoboCell/docs/VERIFICA-TIMEOUT-TCP.md. La roadmap dettagliata e in 37.
+La guida conserva la costruzione di MotionExecution in 34 e di PoseVerifier in 35. Il positivo reale del 2 novembre e in 35.13. L'accesso GitHub e completato; modifiche nella PR https://github.com/Matteo7100/RoboCell/pull/1, ramo codex/verification-tcp. Codice d081a28dbd9d503547128e4e4e44896a6c4ccd8f verificato da GitHub Actions: build, 42 test unitari, 4 test ROS, controllo mesh e confronto modelli riusciti. Il TCP virtuale vision_sort_tcp e a (0,0,0.1034) m da panda_hand, con gli stessi assi. Restano i comandi di conferma sul Panda nella WSL; Matteo riprende il codice da Gazebo. Istruzioni in guida 40 e RoboCell/docs/VERIFICA-TIMEOUT-TCP.md.
 
 Per i contenitori si usa la stessa mesh nella scena MoveIt per visualizzazione e collisioni. La precedente proposta con cinque primitive non e la consegna attiva.
 
@@ -48,8 +48,8 @@ La chiusura di questa fase riguarda la scena di pianificazione. Raggiungibilita 
 
 Proposta di sequenza aggiornata dopo la domanda sul passaggio a Gazebo (37.13):
 
-1. Timeout isolato di PoseVerifier senza movimenti.
-2. Riferimento operativo/TCP e verifica del modello comune a MoveIt/Gazebo.
+1. Timeout isolato di PoseVerifier senza movimenti: implementato e passato su ROS Jazzy in CI; comando WSL pronto.
+2. TCP nominale e modello MoveIt/TF: implementati e testati; resta il probe sul Panda della WSL, poi mantenere il riferimento coerente in Gazebo.
 3. Gazebo Harmonic: caricamento del Panda, controller e primo movimento comandato da MoveIt con verifica degli stati.
 4. Tavolo/cubo fisico e scena coerente; pose esplicite, pinza, pre-presa e presa con contatti.
 5. Pipeline riutilizzabile e coordinatore: un ciclo completo di trasporto/deposito, poi tre oggetti.
@@ -71,7 +71,7 @@ La prima manipolazione usa coordinate note per isolare la pianificazione dalle i
 
 - Fase 5, scena di smistamento e collisioni, conclusa al checkpoint 28.5.
 - Chat corrente: fase 6, prima posa pianificata, eseguita e verificata su dati aggiornati; checkpoint positivo 35.13.
-- Nuova chat consigliata da questo checkpoint: timeout senza movimento, poi TCP/modello e proposta di ingresso anticipato in Gazebo (37.13); testo di ripresa di base in 36.3 della guida.
+- Lavoro delegato proseguito in questa chat: verifiche/TCP pubblicati nella PR #1, comandi WSL in sezione 40; prossimo sviluppo Gazebo dopo la conferma locale. Nessuna nuova chat creata.
 - Conservare stato, file, prove eseguite e prossimo esercizio, mantenendo il metodo guidato.
 
 ## Riferimenti

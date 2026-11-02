@@ -12,14 +12,19 @@ iniziare Gazebo Harmonic.
 Le modifiche preparate il 2 novembre 2026 includono:
 
 - `timeout_probe`: test ROS isolato, senza ricevere stati e senza movimenti;
-- 36 test unitari per PoseVerifier, trasformazioni e confronto dei modelli;
+- 42 test unitari per PoseVerifier, trasformazioni e confronto dei modelli;
 - `tcp_geometry`: conversione completa tra TCP e link della mano;
 - `robot_reference`: confronto offline dei modelli realmente caricati.
+- `panda_tcp`: riferimento nominale e conversioni dei target TCP/mano;
+- `tcp_probe`: controllo FK/TF su un campione aggiornato e frame RViz opzionale.
 
-Stato: 36 test unitari passati su Python 3.12 Windows. Aggiunto un job GitHub
-Actions per eseguire anche il timer reale in ROS Jazzy, ancora da confermare.
-Il TCP specifico del Panda non e ancora definito: il dump ricevuto da
-robot_state_publisher e completo, ma quello di move_group e vuoto.
+Stato: 42 test unitari passati su Python 3.12 Windows. Il timeout reale ROS
+Jazzy e gia riuscito in GitHub Actions: 2.001 s, una sola notifica False,
+altri 3 s senza duplicati. La cinematica dei modelli caricati coincide.
+Il TCP nominale e (0,0,0.1034) m da panda_hand, con gli stessi assi.
+La suite ROS completa e passata: build, 42 test unitari, 4 test ROS, confronto
+modelli e controllo della mesh. [Risultati CI](https://github.com/Matteo7100/RoboCell/actions/runs/41496585807).
+La verifica specifica sul Panda in WSL usa i comandi documentati sotto.
 Non e stato comandato un nuovo movimento.
 
 Le istruzioni riproducibili sono in [docs/VERIFICA-TIMEOUT-TCP.md](docs/VERIFICA-TIMEOUT-TCP.md).

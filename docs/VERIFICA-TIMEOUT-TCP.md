@@ -1,122 +1,148 @@
 # Verifiche prima di Gazebo
 
-## Stato del checkpoint del 2 novembre 2026
+Le modifiche sono nella [PR #1](https://github.com/Matteo7100/RoboCell/pull/1),
+ramo codex/verification-tcp. Comprendono il test isolato del timeout e la
+definizione nominale del TCP, senza nuovi movimenti o modifiche alla scena.
 
-Base letta da GitHub: `d0a779fb13b6f9faf677d2486586d5b6dc2f7c91`.
-Le modifiche sono preparate sul ramo `codex/verification-tcp`, con successiva
-pubblicazione tramite GitHub CLI. Il connettore iniziale aveva rifiutato la
-creazione del ramo con 403. Un clone di `main` non contiene queste modifiche
-finche la relativa PR non viene unita.
+## Cosa e stato implementato
 
-36 test unitari passati in locale. Sono usati clock e servizi sostitutivi nei
-test di PoseVerifier; non e una prova del middleware ROS o del simulatore.
-La compilazione sintattica di tutti i moduli e dei test e riuscita.
-Il test reale ROS non e eseguibile in questo ambiente Windows. E aggiunto
-un job GitHub Actions con il container ROS Jazzy e test_timeout_ros.py;
-il suo esito verra registrato dopo la prima esecuzione.
+- timeout_probe: deadline steady di 2 s, una sola notifica False e altri 3 s
+  senza notifiche duplicate. Distrugge solo la propria subscription; non
+  interrompe il publisher della demo e non chiama servizi MoveIt o action.
+- robot_reference: confronta i modelli esportati da MoveIt e dal publisher TF,
+  legge la catena SRDF e riporta la convenzione TCP selezionata.
+- tcp_probe: controlla geometria e mesh della pinza, acquisisce un campione
+  nuovo, confronta FK e TF al suo esatto timestamp e calcola il TCP.
+  Attende al massimo 8 s. Non pianifica e non comanda il robot.
+- panda_tcp: definizione del punto e conversioni PoseStamped TCP/mano, con
+  copia del messaggio e mantenimento di frame e timestamp.
+- tcp_geometry: composizione/inversa delle trasformazioni e quaternion xyzw.
 
-## Eseguire la copia locale in WSL
+## Punto e assi scelti
 
-Questo percorso permette gia di provare il timeout senza attendere il push.
-Usare un solo terminale WSL per mantenere la variabile del nuovo workspace.
-Il workspace temporaneo ha un nome nuovo: i sorgenti precedenti restano
-disponibili. Non avviare PosePlanner per questo test. La demo puo rimanere
-attiva, ma non e necessaria al timeout.
+Il riferimento virtuale vision_sort_tcp ha origine (0, 0, 0.1034) m rispetto
+a panda_hand e quaternion (0, 0, 0, 1): assi identici alla mano.
+Y e la direzione di apertura/chiusura; +Z va verso le estremita delle dita.
+Le origini delle dita sono a z=0.0584 m; il TCP si trova quindi 45 mm oltre
+tali origini, sulla mezzeria fra le dita nella zona dei polpastrelli.
 
-```bash
-source /opt/ros/jazzy/setup.bash
-ROBOCELL_VERIFY_WS=$(mktemp -d /home/matteo/robocell_verify.XXXXXX)
-mkdir "$ROBOCELL_VERIFY_WS/src"
-cp -a "/mnt/c/Users/matte/Documents/Codex/2026-10-05/vor/outputs/vision-sort-lab/RoboCell/vision_sort_lab" "$ROBOCELL_VERIFY_WS/src/"
-cd "$ROBOCELL_VERIFY_WS"
-colcon build --symlink-install --packages-select vision_sort_lab
-source "$ROBOCELL_VERIFY_WS/install/setup.bash"
-python3 -c "import vision_sort_lab.pose_verifier as m; print(m.__file__)"
-python3 -m unittest discover -s "$ROBOCELL_VERIFY_WS/src/vision_sort_lab/test" -p '*_unit.py' -v
-ros2 run vision_sort_lab timeout_probe
-```
+E una convenzione geometrica nominale esplicita. Non viene dichiarato un link
+TCP preesistente, una calibrazione reale o una presa fisica verificata.
+La pinza ha aperture simmetriche solo quando il mimic tra le dita e rispettato.
+Il probe verifica le ipotesi del modello e la mesh collisionale installata.
 
-Il percorso importato deve appartenere al nuovo workspace o alla sua sorgente
-tramite symlink. Non deve indicare il vecchio workspace `vision_sort_ws`.
-I test unitari devono riportare `Ran 36 tests` e `OK`.
+Fonte della convenzione: [franka_robot.xacro](https://github.com/frankarobotics/franka_ros/blob/ddd2fffd9de44b02ad15b4bbb2bfa2cec4d60d98/franka_description/robots/common/franka_robot.xacro).
+Mesh esaminata: [finger.stl](https://github.com/moveit/moveit_resources/blob/ros2/panda_description/meshes/collision/finger.stl),
+Git blob 3b87289fea8128bcec3e0b4d174b169124e8e444, 32 triangoli.
+Il parametro TCP nominale del sorgente Franka e usato come riferimento
+geometrico; il progetto continua a usare ROS 2 Jazzy.
 
-Il probe impiega circa cinque secondi: due di deadline e tre di osservazione.
-Il log ERROR `Timeout scaduto` e l'esito negativo intenzionale della verifica.
-L'esito positivo del **test** e:
-
-```text
-TIMEOUT PASS | notifiche=1 | risultato=False | durata=2.xxx s | osservazione_successiva=3 s | FK=0 | validita=0 | movimenti=0
-```
-
-Il processo deve chiudersi senza traceback e con codice zero. Dopo il comando
-si puo controllare `echo $?`. Nessun servizio di MoveIt e nessuna action vengono
-richiesti dal probe. Viene rimossa soltanto la subscription della sua istanza;
-il publisher `/joint_states` della demo continua normalmente.
-
-In un ambiente che dispone di pytest, il medesimo test ROS e anche disponibile
-come `test/test_timeout_ros.py`. Non occorre eseguirlo di nuovo se il comando
-`timeout_probe` e gia passato. I test di stile generati dal template ROS non
-sono stati riscritti o dichiarati passati per questa modifica.
-
-## Acquisire il modello effettivo
-
-Con la demo Panda attiva, da un terminale che vede il suo grafo ROS:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source /home/matteo/vision_sort_ws/install/setup.bash
-mkdir -p /home/matteo/robot_reference
-ros2 param dump /move_group > /home/matteo/robot_reference/move_group.params.yaml
-ros2 param dump /robot_state_publisher > /home/matteo/robot_reference/robot_state_publisher.params.yaml
-```
-
-Pubblicare i due file in `docs/robot_reference` della repository. Nel terminale
-del nuovo workspace, dopo aver acquisito i file, si puo gia produrre il report:
-
-```bash
-ros2 run vision_sort_lab robot_reference --move-group /home/matteo/robot_reference/move_group.params.yaml --state-publisher /home/matteo/robot_reference/robot_state_publisher.params.yaml
-```
-
-Il comando confronta nomi dei link, origini, assi, limiti e relazioni dei giunti,
-legge il gruppo SRDF `panda_arm` e descrive riferimenti e geometrie delle dita.
-Non prova l'uguaglianza delle mesh o la presa fisica. Non seleziona automaticamente
-un link perche il suo nome contiene `tcp` e non sceglie un offset numerico.
-
-Primo caricamento ricevuto al commit 770a596c5a9f3fce723ea12a6ace41ea08dd7ddf:
-file in `robot_reference/docs`, dump robot_state_publisher completo, dump
-move_group vuoto (`ros__parameters: {}`). Quest'ultimo non permette il confronto.
-Per recuperare direttamente i due parametri con la demo attiva:
-
-```bash
-ros2 param get --hide-type /move_group robot_description > /home/matteo/robot_reference/move_group.urdf
-ros2 param get --hide-type /move_group robot_description_semantic > /home/matteo/robot_reference/move_group.srdf
-```
-
-I file devono contenere XML valido. `None` o `Parameter not set` non sono un
-modello utilizzabile e richiedono prima una verifica del nodo attivo.
-
-`--tcp-link NOME` e accettato solo per un link gia esistente e collegato alla
-mano da una catena fissa, da esaminare prima dell'adozione come punto di presa.
-
-## Convenzione geometrica gia implementata
-
-`T_A_B` e la posa del riferimento B espressa in A. La definizione del TCP sara
-`T_hand_tcp`. Si usano metri e quaternion nell'ordine ROS `(x, y, z, w)`.
-
-```text
+Le conversioni sono:
+~~~
 T_base_tcp  = T_base_hand * T_hand_tcp
 T_base_hand = T_base_tcp  * inverse(T_hand_tcp)
-```
+~~~
+L'offset viene ruotato con la mano. Con un TCP verso il basso a z=0.02 m,
+panda_hand deve essere a z=0.1234 m, non a z=0.02 m.
+Il planner esistente continua a controllare panda_hand. Per i futuri target
+TCP si usa tcp_target_to_hand; per una posa raggiunta della mano si usa
+hand_pose_to_tcp. Il frame virtuale non va richiesto a FK come link URDF.
 
-Gli assi e la traslazione del TCP saranno fissati dopo la lettura del modello.
-I valori da 10 cm usati nei test sono esempi sintetici, non misure del Panda.
-Il parser rifiuta frame assenti e catene contenenti giunti mobili. I test coprono
-anche una mano rivolta in basso e orientamenti TCP diversi da quelli della mano.
+## Installare il ramo in un nuovo workspace WSL
 
-Resta da completare: scelta documentata del punto fra le dita, configurazione
-specifica e verifica TF/FK coerente sul robot corrente. I relativi comandi
-saranno aggiunti quando il TCP e davvero implementato, prima di Gazebo.
+Lasciare la demo Panda gia aperta. Eseguire tutti i blocchi seguenti nello
+stesso nuovo terminale WSL, mantenendo le variabili. Il workspace ha un nome
+nuovo; non vengono sovrascritti i sorgenti precedenti.
 
-Riferimenti API verificati: [timer rclpy Jazzy](https://github.com/ros2/rclpy/blob/jazzy/rclpy/rclpy/timer.py),
-[gestione risorse Node Jazzy](https://github.com/ros2/rclpy/blob/jazzy/rclpy/rclpy/node.py),
-[parser joint URDF](https://github.com/ros/urdfdom/blob/master/urdf_parser/src/joint.cpp).
+~~~bash
+source /opt/ros/jazzy/setup.bash
+ROBOCELL_WS=$(mktemp -d /home/matteo/robocell_verify.XXXXXX)
+mkdir "$ROBOCELL_WS/src"
+ROBOCELL_REPO="$ROBOCELL_WS/src/RoboCell"
+git clone --branch codex/verification-tcp --single-branch https://github.com/Matteo7100/RoboCell.git "$ROBOCELL_REPO"
+cd "$ROBOCELL_WS"
+colcon build --symlink-install --packages-select vision_sort_lab --allow-overriding vision_sort_lab
+source "$ROBOCELL_WS/install/setup.bash"
+git -C "$ROBOCELL_REPO" log -1 --oneline
+python3 -c "import vision_sort_lab.pose_verifier as m; print(m.__file__)"
+~~~
+
+Il percorso importato deve appartenere al nuovo workspace o alla sua sorgente
+tramite symlink, non al vecchio vision_sort_ws.
+Se la demo non e aperta, avviarla da un altro terminale:
+~~~bash
+source /opt/ros/jazzy/setup.bash
+ros2 launch moveit_resources_panda_moveit_config demo.launch.py
+~~~
+
+## 1. Test unitari e timeout senza movimento
+
+~~~bash
+python3 -m unittest discover -s "$ROBOCELL_REPO/vision_sort_lab/test" -p '*_unit.py' -v
+ros2 run vision_sort_lab timeout_probe
+echo $?
+~~~
+
+Attesi: Ran 42 tests / OK; dopo circa cinque secondi TIMEOUT PASS con
+notifiche=1, risultato=False, durata intorno a 2 s, osservazione_successiva=3 s
+e FK=0, validita=0, movimenti=0. Il log ERROR Timeout scaduto e intenzionale.
+Il processo chiude senza traceback e con codice zero.
+
+## 2. Confronto dei modelli e TCP nominale
+
+~~~bash
+ros2 run vision_sort_lab robot_reference --move-group "$ROBOCELL_REPO/docs/robot_reference/move_group.urdf" --semantic "$ROBOCELL_REPO/docs/robot_reference/move_group.srdf" --state-publisher "$ROBOCELL_REPO/docs/robot_reference/robot_state_publisher.params.yaml" --nominal-panda-tcp
+ros2 run vision_sort_lab tcp_probe --model "$ROBOCELL_REPO/docs/robot_reference/robot_state_publisher.params.yaml"
+echo $?
+~~~
+
+Il report deve contenere kinematics_match=true, chain_tip=panda_link8,
+tcp_definition.frame=vision_sort_tcp e xyz_m=[0,0,0.1034].
+Si usano i due XML acquisiti direttamente: il primo move_group.params.yaml
+vuoto resta soltanto una traccia diagnostica e non e usato nella verifica.
+
+Con la demo attiva, il probe deve riportare TCP PASS, stamp aggiornato,
+FK-TF entro 1 mm e 0.001 rad, posizione del TCP in panda_link0 e movimenti=0.
+Queste tolleranze confrontano FK e TF, non sostituiscono i vincoli di posa
+del planner. Il codice finale deve essere zero.
+
+Se mancano stati nuovi, TF allo stesso istante o servizio FK, il probe conclude
+con TCP FAIL dopo 8 s e codice nonzero. Mesh o geometria diverse fanno fallire
+il controllo preliminare con una causa esplicita.
+
+## Vedere il TCP in RViz
+
+Facoltativo, nello stesso terminale configurato:
+~~~bash
+ros2 run vision_sort_lab tcp_probe --model "$ROBOCELL_REPO/docs/robot_reference/robot_state_publisher.params.yaml" --show
+~~~
+
+Dopo TCP PASS il processo rimane attivo. In RViz aggiungere il display TF e
+abilitare vision_sort_tcp; usando Fixed Frame panda_link0 si vede l'origine
+fra le dita, nella regione dei polpastrelli. Il robot non viene mosso.
+Ctrl+C chiude il processo che pubblica il riferimento virtuale.
+
+## Prove automatiche e limiti
+
+Suite finale [GitHub Actions](https://github.com/Matteo7100/RoboCell/actions/runs/41496585807)
+riuscita sul codice d081a28dbd9d503547128e4e4e44896a6c4ccd8f: build, 42 test
+unitari e 4 ROS passati; confronto modelli e mesh installata riusciti.
+Timeout osservato 2.001 s; il probe sintetico ha FK-TF=0 e TCP z=0.4966 m per
+una mano rivolta in basso a z=0.6 m. Queste coordinate appartengono al test,
+non sono la posa richiesta al Panda della WSL.
+
+42 test unitari sono eseguibili anche senza ROS tramite unittest.
+I test ROS richiedono rclpy e usano un container Jazzy nel workflow:
+- timer reale PoseVerifier: scadenza, risultato unico e cleanup;
+- probe TCP con FK/TF sintetici, compreso arrivo ritardato di TF;
+- rifiuto di un frame FK errato;
+- scadenza del probe senza stati;
+- confronto dei modelli caricati e hash della mesh Panda installata.
+
+I test sintetici verificano il software e il middleware; l'output del probe
+sul Panda della WSL resta il controllo specifico dell'installazione dell'utente.
+Non vengono ripetute prove della scena o eseguite nuove traiettorie.
+I linter del template ROS non sono inclusi in questa suite mirata.
+
+Dopo l'esito positivo dei due comandi finali in WSL si puo iniziare a collegare
+Gazebo Harmonic. Il TCP andra mantenuto coerente nel modello usato dal simulatore.

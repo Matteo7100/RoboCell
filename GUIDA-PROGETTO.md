@@ -37,7 +37,7 @@ La guida è un documento Windows. I comandi `bash` in questa guida sono invece d
 - **Limite del servizio verificato nel sorgente 2.12.4:** `GetMotionPlan` sostituisce con `FAILURE (99999)` il codice quando `generatePlan` restituisce falso. La politica del retry non include quel codice generico; non promettere una ripetizione nella demo per quei fallimenti (18.9).
 - **Completato:** parametro del target da terminale confermato dall'utente; log del movimento verso `0.8` rad con verifica positiva allegato (19.4). Conferma generale delle prove, senza altri due log o costruttore allegati.
 - **Completato:** `scene_inspector.py` ricevuto e rivisto; richiesta reale a GetPlanningScene riuscita, `Numero oggetti: 0` (20.7). Import Node corretto nel codice. Risoluzione degli avvisi Pylance non esplicitamente confermata.
-- **Punto corrente (2 novembre):** percorso completo positivo confermato in 35.13. Matteo incarica l'assistente di completare verifiche e TCP, riprendendo il codice da Gazebo. Ricevuta e letta Matteo7100/RoboCell al commit d0a779fb13b6f9faf677d2486586d5b6dc2f7c91. Copia locale in RoboCell: timeout_probe, trasformazioni TCP/mano, report del modello e 36 test unitari passati (39). Creazione del ramo remoto rifiutata con 403; gh locale non autenticato. Richiesti accesso per la pubblicazione e dump della descrizione robot attiva. Test del timer ROS e TCP specifico ancora da completare; nessuna modifica remota o nuovo movimento.
+- **Punto corrente (2 novembre):** implementazione di verifiche e TCP completata e pubblicata nella PR https://github.com/Matteo7100/RoboCell/pull/1, ramo codex/verification-tcp. Timeout reale rclpy riuscito (2.001 s e notifica unica), TCP nominale vision_sort_tcp a (0,0,0.1034) m da panda_hand, modelli MoveIt/TF coerenti. CI finale su codice d081a28dbd9d503547128e4e4e44896a6c4ccd8f: build, 42 test unitari, 4 test ROS, mesh e confronto dei modelli passati. Restano da lanciare in WSL i comandi di controllo dell'installazione (sezione 40); poi Matteo riprende il codice dall'integrazione Gazebo. Nessun nuovo movimento eseguito per queste prove.
 - **Ancora da verificare o realizzare:** manipolazione da pose note, presa fisica in Gazebo, visione e recupero al livello del compito; la cancellazione efficace nella demo resta un limite distinto documentato.
 
 Per ritrovare rapidamente il materiale:
@@ -6504,3 +6504,116 @@ dei file reali caricati e conversione del target TCP al goal panda_hand. Nuove
 prove ROS del probe con FK/TF sintetici, assenza di stati e frame errato sono
 pronte nel workflow; il loro esito resta da osservare. Restera distinta la
 verifica del TCP sul Panda effettivamente in esecuzione nella WSL.
+
+## 40. Verifiche e TCP pubblicati: comandi finali prima di Gazebo
+
+### 40.1 Risultato del lavoro delegato
+
+Pull request: https://github.com/Matteo7100/RoboCell/pull/1
+Branch: codex/verification-tcp; main non viene unito automaticamente.
+Codice verificato: d081a28dbd9d503547128e4e4e44896a6c4ccd8f.
+Le successive modifiche di documentazione non cambiano questo codice.
+
+Workflow finale: https://github.com/Matteo7100/RoboCell/actions/runs/41496585807
+Concluso success. Build ROS, **42 test unitari e 4 test ROS passati**; anche
+confronto dei modelli caricati e hash della mesh Panda installata riusciti.
+Dal log reale del container ROS Jazzy:
+
+```text
+TIMEOUT PASS | notifiche=1 | risultato=False | durata=2.001 s | osservazione_successiva=3 s | FK=0 | validita=0 | movimenti=0
+TCP PASS | FK-TF=0.000000 mm, 0.000000000 rad | TCP in panda_link0=(0.300000, 0.000000, 0.496600) m | hand->TCP=(0, 0, 0.1034) m | movimenti=0
+4 passed in 6.62s
+Uploaded models agree; nominal TCP offset confirmed
+```
+
+La posizione (0.3,0,0.4966) del log TCP appartiene al robot sintetico del test,
+non al Panda della WSL. I quattro test ROS comprendono timeout PoseVerifier,
+probe TCP positivo con TF inizialmente ritardato, frame FK errato e scadenza
+del probe senza stati. Nel primo avvio il test sintetico positivo aveva
+quaternion incompleti con w lasciato al default; corretto esplicitamente a 0
+per la rotazione desiderata di 180 gradi e verificato con la suite finale.
+Questa correzione riguarda il dato sintetico; non sono cambiati i vincoli del
+planner o le tolleranze per far passare il test.
+
+La mesh installata nel container ha Git blob
+3b87289fea8128bcec3e0b4d174b169124e8e444, uguale a quella esaminata. Il probe
+verifica nuovamente il file nella WSL prima di usare la convenzione nominale.
+La notifica positiva della posa raggiunta osservata da Matteo in 35.13 resta
+la prova reale precedente; non e stata ripetuta. Nessuna prova della scena
+della fase 5 e stata ripetuta.
+
+### 40.2 Installazione reviewabile e separata in WSL
+
+Lasciare attiva la demo Panda gia usata. In un nuovo terminale WSL eseguire
+i blocchi seguenti nello stesso terminale, cosi le variabili restano definite.
+Il nuovo workspace non sovrascrive quello precedente.
+
+```bash
+source /opt/ros/jazzy/setup.bash
+ROBOCELL_WS=$(mktemp -d /home/matteo/robocell_verify.XXXXXX)
+mkdir "$ROBOCELL_WS/src"
+ROBOCELL_REPO="$ROBOCELL_WS/src/RoboCell"
+git clone --branch codex/verification-tcp --single-branch https://github.com/Matteo7100/RoboCell.git "$ROBOCELL_REPO"
+cd "$ROBOCELL_WS"
+colcon build --symlink-install --packages-select vision_sort_lab --allow-overriding vision_sort_lab
+source "$ROBOCELL_WS/install/setup.bash"
+git -C "$ROBOCELL_REPO" log -1 --oneline
+python3 -c "import vision_sort_lab.pose_verifier as m; print(m.__file__)"
+```
+
+Il modulo importato deve appartenere al nuovo workspace, anche tramite
+symlink alla sua sorgente. Non usare il vecchio pose_planner per questa prova.
+Il probe e indipendente dalla pipeline di esecuzione e non comanda traiettorie.
+
+### 40.3 Test unitari e timeout controllato
+
+```bash
+python3 -m unittest discover -s "$ROBOCELL_REPO/vision_sort_lab/test" -p '*_unit.py' -v
+ros2 run vision_sort_lab timeout_probe
+echo $?
+```
+
+Attesi Ran 42 tests / OK e TIMEOUT PASS dopo circa cinque secondi. La scadenza
+del verificatore intorno a due secondi produce intenzionalmente un log ERROR;
+il test passa solo con una notifica False, tre secondi senza duplicati,
+nessun campione o servizio richiesto, nessun traceback e codice di uscita 0.
+
+### 40.4 Confronto dei modelli e probe TCP sulla demo
+
+```bash
+ros2 run vision_sort_lab robot_reference --move-group "$ROBOCELL_REPO/docs/robot_reference/move_group.urdf" --semantic "$ROBOCELL_REPO/docs/robot_reference/move_group.srdf" --state-publisher "$ROBOCELL_REPO/docs/robot_reference/robot_state_publisher.params.yaml" --nominal-panda-tcp
+ros2 run vision_sort_lab tcp_probe --model "$ROBOCELL_REPO/docs/robot_reference/robot_state_publisher.params.yaml"
+echo $?
+```
+
+Attesi kinematics_match=true, chain_tip=panda_link8 e definizione nominale del
+frame vision_sort_tcp, xyz_m=[0,0,0.1034], quaternion_xyzw=[0,0,0,1].
+Poi TCP PASS con stamp aggiornato, accordo FK/TF sullo stesso campione,
+posizione del TCP in panda_link0 e movimenti=0; codice finale 0.
+Le coordinate reali del TCP dipendono dallo stato corrente: non confrontarle
+con il robot sintetico del log CI. La soglia 1 mm/0.001 rad confronta FK e TF;
+non sostituisce il vincolo sferico di 5 mm e i vincoli di orientamento MoveIt.
+
+### 40.5 Visualizzare il punto operativo e riprendere Gazebo
+
+Facoltativo, nello stesso terminale configurato:
+
+```bash
+ros2 run vision_sort_lab tcp_probe --model "$ROBOCELL_REPO/docs/robot_reference/robot_state_publisher.params.yaml" --show
+```
+
+Dopo TCP PASS, il processo mantiene attivo il frame fisso panda_hand ->
+vision_sort_tcp. In RViz, display TF con vision_sort_tcp visibile e Fixed Frame
+panda_link0: l'origine si trova fra le dita nella zona dei polpastrelli. Non
+deve muoversi il robot per la sola visualizzazione. Ctrl+C chiude il processo.
+
+Implementazione e test automatici dei due passi delegati sono completati.
+La prova specifica nella WSL di Matteo attende l'output dei comandi sopra;
+una volta positivi, il prossimo lavoro e collegare Gazebo Harmonic, con Matteo
+nuovamente alla scrittura del codice. Non e richiesto completare prima un ciclo
+mock di presa/deposito. Il TCP nominale va mantenuto coerente con il modello
+fisico del simulatore; presa/attrito/contatti non sono provati dai test attuali.
+
+Istruzioni complete anche in RoboCell/docs/VERIFICA-TIMEOUT-TCP.md. Guida e
+mappa PERCORSO sono sincronizzate nella repository. L'accesso GitHub e riuscito;
+non rimane una richiesta di autenticazione o autorizzazione pendente.
