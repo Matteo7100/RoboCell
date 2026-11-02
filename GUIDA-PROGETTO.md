@@ -6617,3 +6617,24 @@ fisico del simulatore; presa/attrito/contatti non sono provati dai test attuali.
 Istruzioni complete anche in RoboCell/docs/VERIFICA-TIMEOUT-TCP.md. Guida e
 mappa PERCORSO sono sincronizzate nella repository. L'accesso GitHub e riuscito;
 non rimane una richiesta di autenticazione o autorizzazione pendente.
+
+### 40.6 Timeout confermato anche nella WSL di Matteo
+
+Matteo conferma il checkout 7554edb del ramo codex/verification-tcp nel
+workspace /home/matteo/robocell_verify.V8qcfk. Ricevuto l'output reale:
+
+```text
+TIMEOUT PASS | notifiche=1 | risultato=False | durata=2.001 s | osservazione_successiva=3 s | FK=0 | validita=0 | movimenti=0
+```
+
+Il ramo negativo temporale e ora confermato anche nell'installazione WSL:
+una notifica False, timer chiuso e tre secondi senza duplicati, senza campioni,
+richieste FK/validita o movimento. Il log ERROR Timeout scaduto e intenzionale.
+L'output fornito non contiene traceback; non sono stati allegati il risultato
+di echo $? o quello dei test unitari in WSL, che non vengono dedotti da questo
+singolo log. Non serve ripetere il test positivo di pianificazione/esecuzione.
+
+Prossimo controllo operativo: eseguire il confronto dei modelli e tcp_probe
+come in 40.4, nello stesso terminale con ROBOCELL_REPO ancora impostato e la
+demo Panda attiva. Attendere TCP PASS e codice finale zero prima di iniziare
+Gazebo. Nessun nuovo sorgente Python modificato per questo checkpoint.
