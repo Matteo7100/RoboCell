@@ -6456,3 +6456,51 @@ ros:jazzy-ros-base-noble: build, test unitari e test del timer rclpy reale senza
 robot, controllori o servizi MoveIt. L'esito resta da osservare dopo il push.
 Questo permette di verificare autonomamente il ramo temporale su ROS Linux;
 la prova WSL specifica dell'utente rimane distinta.
+
+### 39.7 Timeout ROS riuscito e TCP implementato
+
+Primo commit remoto: eb97b54b212f1366f4f0acfc4ead50b70f7e0f6a. Il workflow
+https://github.com/Matteo7100/RoboCell/actions/runs/41492640534 e concluso con
+success: build, 36 test unitari e test reale rclpy. Dal log: TIMEOUT PASS,
+notifiche=1, risultato=False, durata=2.001 s, osservazione successiva=3 s,
+FK=0, validita=0, movimenti=0; 1 passed in 5.65s. Questo chiude il ramo del
+timeout su ROS Jazzy Linux in container, non e una prova eseguita nella WSL.
+
+Caricati anche move_group.urdf e move_group.srdf al main
+8d5b1a8b39b69f940141386b5453d00b70147f74. La cinematica del MoveIt URDF coincide
+con quella del dump robot_state_publisher; il gruppo panda_arm ha base panda_link0
+e tip panda_link8. I file XML risolvono il precedente dump YAML vuoto.
+
+Implementati panda_tcp.py e tcp_probe.py. Convenzione nominale esplicita:
+vision_sort_tcp rispetto a panda_hand, xyz=(0,0,0.1034) m e quaternion=(0,0,0,1).
+Il punto e sulla mezzeria tra le dita, 45 mm oltre le loro origini a z=58.4 mm;
+Y e la direzione di apertura/chiusura e +Z punta verso le estremita delle dita.
+L'offset e coerente con la convenzione Franka documentata, non e un link gia
+presente nell'URDF o una prova di contatto fisico.
+
+Fonte geometrica primaria della convenzione nominale: franka_robot.xacro
+https://github.com/frankarobotics/franka_ros/blob/ddd2fffd9de44b02ad15b4bbb2bfa2cec4d60d98/franka_description/robots/common/franka_robot.xacro
+(tcp_xyz 0 0 0.1034 e tcp_rpy 0 0 0). Questo e un riferimento geometrico;
+non viene introdotta una dipendenza ROS 1 nel progetto Jazzy.
+
+Esaminata la mesh collisionale ufficiale finger.stl di moveit_resources:
+Git blob 3b87289fea8128bcec3e0b4d174b169124e8e444, 1684 byte, 32 triangoli.
+La faccia interna verso -Y passa approssimativamente per z=36.16..53.72 mm
+rispetto all'origine del dito; z=45 mm cade nella sua regione. Questa e una
+verifica nominale della geometria, non una calibrazione dei polpastrelli.
+Il probe controlla anche l'hash della mesh realmente installata e rifiuta
+modelli differenti, origini/assi/corse/mimic/scale/origini collisione differenti.
+
+Il probe legge un campione articolare successivo al proprio avvio, acquisisce
+TF panda_link0->panda_hand all'esatto timestamp del campione e chiede FK per
+panda_link8 e panda_hand sul medesimo stato. Controlla trasformazione fissa
+tip/mano e accordo FK-TF entro 1 mm e 0.001 rad; poi ricava il TCP. La deadline
+indipendente e 8 s. Non vengono inviati piani, ExecuteTrajectory o comandi pinza.
+Con --show pubblica dopo il successo il solo frame virtuale fisso e rimane
+attivo per RViz fino a Ctrl+C.
+
+42 test unitari passati localmente dopo questi nuovi moduli, inclusi confronto
+dei file reali caricati e conversione del target TCP al goal panda_hand. Nuove
+prove ROS del probe con FK/TF sintetici, assenza di stati e frame errato sono
+pronte nel workflow; il loro esito resta da osservare. Restera distinta la
+verifica del TCP sul Panda effettivamente in esecuzione nella WSL.

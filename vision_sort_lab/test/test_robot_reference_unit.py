@@ -1,6 +1,7 @@
 """Use synthetic models to exercise the offline description comparison."""
 
 import unittest
+from pathlib import Path
 
 from vision_sort_lab.robot_reference import find_parameter, inspect_models
 
@@ -72,6 +73,19 @@ class ReferenceTests(unittest.TestCase):
             with self.subTest(document=document):
                 with self.assertRaises(ValueError):
                     find_parameter(document, 'robot_description')
+
+    def test_uploaded_models_agree_and_define_the_virtual_tcp(self):
+        reference = Path(__file__).resolve().parents[2] / 'docs/robot_reference'
+        move_group = dump(
+            robot_description=(reference / 'move_group.urdf').read_text(encoding='utf-8'),
+            robot_description_semantic=(reference / 'move_group.srdf').read_text(encoding='utf-8'),
+        )
+        publisher = dump(robot_description=(reference / 'robot_state_publisher.urdf').read_text(encoding='utf-8'))
+        report = inspect_models(move_group, publisher, nominal_panda_tcp=True)
+        self.assertTrue(report['kinematics_match'])
+        self.assertEqual(report['chain_tip'], 'panda_link8')
+        self.assertEqual(report['tcp_definition']['frame'], 'vision_sort_tcp')
+        self.assertEqual(report['tcp_definition']['xyz_m'], (0, 0, 0.1034))
 
 
 if __name__ == '__main__':

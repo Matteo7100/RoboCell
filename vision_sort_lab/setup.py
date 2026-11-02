@@ -33,6 +33,7 @@ setup(
         'pose_planner = vision_sort_lab.pose_planner:main',
         'timeout_probe = vision_sort_lab.timeout_probe:main',
         'robot_reference = vision_sort_lab.robot_reference:main',
+        'tcp_probe = vision_sort_lab.tcp_probe:main',
        ],
     },
 )
