@@ -37,7 +37,7 @@ La guida è un documento Windows. I comandi `bash` in questa guida sono invece d
 - **Limite del servizio verificato nel sorgente 2.12.4:** `GetMotionPlan` sostituisce con `FAILURE (99999)` il codice quando `generatePlan` restituisce falso. La politica del retry non include quel codice generico; non promettere una ripetizione nella demo per quei fallimenti (18.9).
 - **Completato:** parametro del target da terminale confermato dall'utente; log del movimento verso `0.8` rad con verifica positiva allegato (19.4). Conferma generale delle prove, senza altri due log o costruttore allegati.
 - **Completato:** `scene_inspector.py` ricevuto e rivisto; richiesta reale a GetPlanningScene riuscita, `Numero oggetti: 0` (20.7). Import Node corretto nel codice. Risoluzione degli avvisi Pylance non esplicitamente confermata.
-- **Punto corrente (2 novembre):** implementazione di verifiche e TCP completata e pubblicata nella PR https://github.com/Matteo7100/RoboCell/pull/1, ramo codex/verification-tcp. Timeout reale rclpy riuscito (2.001 s e notifica unica), TCP nominale vision_sort_tcp a (0,0,0.1034) m da panda_hand, modelli MoveIt/TF coerenti. CI finale su codice d081a28dbd9d503547128e4e4e44896a6c4ccd8f: build, 42 test unitari, 4 test ROS, mesh e confronto dei modelli passati. Restano da lanciare in WSL i comandi di controllo dell'installazione (sezione 40); poi Matteo riprende il codice dall'integrazione Gazebo. Nessun nuovo movimento eseguito per queste prove.
+- **Punto corrente (2 novembre):** entrambi i passi delegati conclusi, anche con le prove WSL di Matteo: TIMEOUT PASS (2.001 s, una notifica False), modelli coerenti, TCP PASS e codice finale 0 (40.6-40.7). TCP nominale vision_sort_tcp a (0,0,0.1034) m da panda_hand; posizione osservata in panda_link0=(0.307020,0,0.486870) m. CI: build, 42 test unitari, 4 test ROS, mesh e confronto modelli passati. PR #1 unita su main, merge ee0129113b8d70896b625c869dd93637c2558936. Il prossimo blocco e Gazebo; Matteo riprende personalmente il codice guidato. Nessun nuovo movimento eseguito per queste prove.
 - **Ancora da verificare o realizzare:** manipolazione da pose note, presa fisica in Gazebo, visione e recupero al livello del compito; la cancellazione efficace nella demo resta un limite distinto documentato.
 
 Per ritrovare rapidamente il materiale:
@@ -6617,3 +6617,97 @@ fisico del simulatore; presa/attrito/contatti non sono provati dai test attuali.
 Istruzioni complete anche in RoboCell/docs/VERIFICA-TIMEOUT-TCP.md. Guida e
 mappa PERCORSO sono sincronizzate nella repository. L'accesso GitHub e riuscito;
 non rimane una richiesta di autenticazione o autorizzazione pendente.
+
+### 40.6 Timeout confermato anche nella WSL di Matteo
+
+Matteo conferma il checkout 7554edb del ramo codex/verification-tcp nel
+workspace /home/matteo/robocell_verify.V8qcfk. Ricevuto l'output reale:
+
+```text
+TIMEOUT PASS | notifiche=1 | risultato=False | durata=2.001 s | osservazione_successiva=3 s | FK=0 | validita=0 | movimenti=0
+```
+
+Il ramo negativo temporale e ora confermato anche nell'installazione WSL:
+una notifica False, timer chiuso e tre secondi senza duplicati, senza campioni,
+richieste FK/validita o movimento. Il log ERROR Timeout scaduto e intenzionale.
+L'output fornito non contiene traceback; non sono stati allegati il risultato
+di echo $? o quello dei test unitari in WSL, che non vengono dedotti da questo
+singolo log. Non serve ripetere il test positivo di pianificazione/esecuzione.
+
+Prossimo controllo operativo: eseguire il confronto dei modelli e tcp_probe
+come in 40.4, nello stesso terminale con ROBOCELL_REPO ancora impostato e la
+demo Panda attiva. Attendere TCP PASS e codice finale zero prima di iniziare
+Gazebo. Nessun nuovo sorgente Python modificato per questo checkpoint.
+
+### 40.7 TCP confermato nella WSL: chiusura dei due passi delegati
+
+Matteo esegue robot_reference con gli XML di MoveIt e il dump del publisher:
+kinematics_match=true, base panda_link0, gruppo panda_arm, tip panda_link8,
+link controllato panda_hand. Tip e mano hanno la stessa origine, con yaw
+relativo -45 gradi. existing_tcp_candidates=[] e coerente con il modello:
+vision_sort_tcp e la convenzione virtuale esplicita del progetto, non un link
+URDF preesistente. Trasformazione mano->TCP: (0,0,0.1034) m, quaternion (0,0,0,1).
+
+Output reale di tcp_probe sulla demo Panda:
+
+```text
+TCP PASS | stamp=1793643183.530528182 | FK-TF=0.000000 mm, 0.000000000 rad | TCP in panda_link0=(0.307020, -0.000000, 0.486870) m | hand->TCP=(0, 0, 0.1034) m | movimenti=0
+echo $? -> 0
+```
+
+Il probe ha superato i controlli preliminari della geometria e della mesh
+installata, acquisito lo stato aggiornato e confrontato FK/TF allo stesso
+istante. L'errore riportato e nullo alla precisione stampata. Il processo
+conclude con successo. La quota 0.486870 m e la posizione del TCP nello stato
+corrente, non un nuovo target imposto al robot. Non sono state comandate
+traiettorie, mosse della pinza o ripetizioni della scena della fase 5.
+
+Entrambi i passi affidati all'assistente sono ora conclusi: timeout reale e
+TCP nominale definito e verificato nell'installazione dell'utente. I test
+unitari WSL non sono stati allegati; rimangono confermati i 42 test unitari e
+4 test ROS della CI, oltre alle due prove WSL riportate. Nessuna calibrazione
+di contatto o presa fisica viene dedotta da questi risultati.
+
+PR #1 unita su main dall'utente: merge commit
+ee0129113b8d70896b625c869dd93637c2558936. I checkpoint WSL successivi vengono
+pubblicati in un seguito di sola documentazione, preservando il codice gia
+verificato. Checkout usato da Matteo: /home/matteo/robocell_verify.V8qcfk/src/RoboCell;
+workspace originario /home/matteo/vision_sort_ws conservato.
+
+Da questo punto Matteo riprende personalmente a scrivere il codice per Gazebo,
+con API spiegate prima dell'uso, moduli separati ed esercizi incrementali con
+verifica. Primo blocco: inventario dei pacchetti di simulazione e integrazione
+ROS; poi Panda in Gazebo con ros2_control e primo movimento MoveIt verificato.
+Nessuna installazione Gazebo o modifica del modello fisico ancora eseguita.
+
+### 40.8 Primo blocco Gazebo: inventario, senza installazioni
+
+Nel prossimo terminale WSL raccogliere le versioni disponibili e la presenza
+dei tre pacchetti di integrazione. Questi comandi interrogano l'installazione;
+non avviano un mondo o comandano il robot.
+
+```bash
+source /opt/ros/jazzy/setup.bash
+gz sim --versions
+ros2 pkg prefix ros_gz_sim
+ros2 pkg prefix ros_gz_bridge
+ros2 pkg prefix gz_ros2_control
+```
+
+gz sim --versions elenca le versioni Gazebo Sim disponibili; per Harmonic
+la versione maggiore di gz-sim e 8. ros2 pkg prefix mostra la directory
+d'installazione del pacchetto se presente. Eventuali comandi/pacchetti assenti
+vanno riportati: le installazioni verranno scelte dai risultati, non presunte.
+
+Ruoli da spiegare prima delle modifiche: ros_gz_sim per avvio/inserimento nel
+simulatore, ros_gz_bridge per gli scambi di messaggi ROS/Gazebo necessari e
+gz_ros2_control per collegare il controller manager ROS al modello fisico.
+Non passare il traffico dei giunti attraverso un bridge generico come se fosse
+equivalente all'integrazione dei controllori. Il modello dovra mantenere
+cinematica e convenzione TCP gia verificate.
+
+Fonti primarie consultate: https://control.ros.org/jazzy/doc/gz_ros2_control/doc/index.html
+e https://gazebosim.org/docs/harmonic/install_ubuntu/; il comando --versions e
+documentato in https://gazebosim.org/docs/ionic/gui/ anche per distinguere
+installazioni Harmonic 8.x. Stato: inventario assegnato, output non ancora
+ricevuto; nessun pacchetto installato o file Gazebo scritto dall'assistente.
