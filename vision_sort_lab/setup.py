@@ -31,6 +31,9 @@ setup(
         'scene_loader = vision_sort_lab.scene_loader:main',
         'tool_pose_reader = vision_sort_lab.tool_pose_reader:main',
         'pose_planner = vision_sort_lab.pose_planner:main',
+        'timeout_probe = vision_sort_lab.timeout_probe:main',
+        'robot_reference = vision_sort_lab.robot_reference:main',
        ],
     },
 )
+

@@ -1,0 +1,41 @@
+name: ROS Jazzy verification
+
+on:
+  push:
+    branches: [codex/verification-tcp]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy-ros-base-noble
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install test dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            python3-colcon-common-extensions python3-pytest python3-yaml \
+            ros-jazzy-moveit-msgs
+      - name: Build package
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --symlink-install --packages-select vision_sort_lab
+      - name: Unit tests
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          python3 -m unittest discover -s vision_sort_lab/test -p '*_unit.py' -v
+          python3 -m compileall -q vision_sort_lab/vision_sort_lab vision_sort_lab/test
+      - name: Real ROS timer, single result and cleanup
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          python3 -m pytest -q -s vision_sort_lab/test/test_timeout_ros.py
