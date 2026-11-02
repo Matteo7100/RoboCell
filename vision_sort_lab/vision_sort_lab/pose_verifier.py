@@ -64,7 +64,8 @@ class PoseVerifier():
     def check_timeout(self):
         if self.verification_pending is False:
             return False
-        if self.timeout_sec < (self.steady_clock.now().nanoseconds - self.start_steady_ns)/1_000_000_000:
+        elapsed_ns = self.steady_clock.now().nanoseconds - self.start_steady_ns
+        if elapsed_ns >= self.timeout_sec * 1_000_000_000:
             self._finish(False, 'Timeout scaduto')
             return True
         else:
@@ -104,8 +105,6 @@ class PoseVerifier():
         self.verification_start_ns = self.node.get_clock().now().nanoseconds
         self.start_steady_ns = self.steady_clock.now().nanoseconds
 
-        starting_time_ROS = self.verification_start_ns
-        starting_time_steady = self.start_steady_ns
         self.verification_pending = True
         self.verification_started = True
         self.verification_timer.reset()
@@ -333,7 +332,10 @@ class PoseVerifier():
     def destroy(self):
         self.verification_pending = False
         self.verification_timer.cancel()
-        self.node.destroy_subscription(self.joint_subscription)
+        if self.joint_subscription is not None:
+            self.node.destroy_subscription(self.joint_subscription)
+            self.joint_subscription = None
         self.node.destroy_timer(self.verification_timer)
         self.node.destroy_client(self.fk_client)
         self.node.destroy_client(self.validity_client)
+
