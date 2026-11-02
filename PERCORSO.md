@@ -8,12 +8,13 @@ Guida principale con esercizi, codice discusso e risultati: [GUIDA-PROGETTO.md](
 
 Smistare tre oggetti rossi o blu in due contenitori con un braccio Panda: percepire, scegliere la presa, pianificare, eseguire, verificare il deposito e gestire i fallimenti.
 
-Matteo scrive personalmente il codice Python/rclpy, salvo richieste esplicite di completamento all'assistente. Dal 2 novembre affida all'assistente la chiusura delle verifiche e la definizione del TCP, con codice su GitHub e comandi di prova da eseguire in WSL; riprendera la scrittura dall'integrazione Gazebo (guida 38). Le nuove API vengono spiegate prima degli esercizi e le nuove responsabilita vengono separate in moduli quando migliora la chiarezza. La guida viene aggiornata a ogni checkpoint.
+Matteo scrive personalmente il codice Python/rclpy, salvo richieste esplicite di completamento all'assistente. L'incarico del 2 novembre per verifiche e TCP e concluso con test automatici e conferma WSL (guida 40.7); Matteo riprende ora la scrittura dall'integrazione Gazebo. Le nuove API vengono spiegate prima degli esercizi e le nuove responsabilita vengono separate in moduli quando migliora la chiarezza. La guida viene aggiornata a ogni checkpoint.
 
 ## Ambiente corrente
 
 - ROS 2 Jazzy su Ubuntu 24.04 in WSL.
 - Workspace: /home/matteo/vision_sort_ws.
+- Workspace verificato per il codice GitHub: /home/matteo/robocell_verify.V8qcfk, checkout src/RoboCell; il workspace originario e conservato.
 - Panda nella demo MoveIt/RViz con controllori simulati; Gazebo non ancora integrato.
 - Documentazione e asset geometrici nella cartella Windows del progetto.
 
@@ -34,9 +35,9 @@ Matteo scrive personalmente il codice Python/rclpy, salvo richieste esplicite di
 
 ## Punto corrente - fase 6, prima posa eseguita e verificata
 
-Fase 5 conclusa al checkpoint 28.5; non ripetere quelle prove senza nuovi problemi. Il percorso positivo della fase 6 arriva fino alla verifica della posa raggiunta dopo ExecuteTrajectory (35.13). L'assistente ha completato implementazione e test automatici di timeout e TCP: PR #1 di Matteo7100/RoboCell, 42 test unitari e 4 ROS passati, modelli e mesh coerenti (guida 40). Prossimo controllo: lanciare in WSL timeout_probe e tcp_probe con i comandi di 40; poi iniziare Gazebo prima del ciclo completo di manipolazione. Presa e manipolazione non ancora implementate.
+Fase 5 conclusa al checkpoint 28.5; non ripetere quelle prove senza nuovi problemi. Il percorso positivo della fase 6 arriva fino alla verifica della posa raggiunta dopo ExecuteTrajectory (35.13). Entrambi i passi delegati sono conclusi: 42 test unitari e 4 ROS in CI; TIMEOUT PASS, confronto modelli e TCP PASS con codice 0 nella WSL di Matteo (40.6-40.7). TCP corrente in panda_link0=(0.307020,0,0.486870) m, FK/TF concordi alla precisione del log, nessun movimento per queste prove. PR #1 unita su main. Prossimo blocco: integrazione Gazebo con Matteo nuovamente alla scrittura del codice. Presa e manipolazione non ancora implementate.
 
-La guida conserva la costruzione di MotionExecution in 34 e di PoseVerifier in 35. Il positivo reale del 2 novembre e in 35.13. L'accesso GitHub e completato; modifiche nella PR https://github.com/Matteo7100/RoboCell/pull/1, ramo codex/verification-tcp. Codice d081a28dbd9d503547128e4e4e44896a6c4ccd8f verificato da GitHub Actions: build, 42 test unitari, 4 test ROS, controllo mesh e confronto modelli riusciti. Il TCP virtuale vision_sort_tcp e a (0,0,0.1034) m da panda_hand, con gli stessi assi. Restano i comandi di conferma sul Panda nella WSL; Matteo riprende il codice da Gazebo. Istruzioni in guida 40 e RoboCell/docs/VERIFICA-TIMEOUT-TCP.md.
+La guida conserva la costruzione di MotionExecution in 34 e di PoseVerifier in 35. Il positivo reale del 2 novembre e in 35.13. La PR https://github.com/Matteo7100/RoboCell/pull/1 e unita su main al commit ee0129113b8d70896b625c869dd93637c2558936. Codice d081a28dbd9d503547128e4e4e44896a6c4ccd8f verificato da GitHub Actions; prove WSL confermate in 40.6-40.7. Il TCP virtuale vision_sort_tcp e a (0,0,0.1034) m da panda_hand, con gli stessi assi. Istruzioni riproducibili in guida 40 e RoboCell/docs/VERIFICA-TIMEOUT-TCP.md.
 
 Per i contenitori si usa la stessa mesh nella scena MoveIt per visualizzazione e collisioni. La precedente proposta con cinque primitive non e la consegna attiva.
 
@@ -48,8 +49,8 @@ La chiusura di questa fase riguarda la scena di pianificazione. Raggiungibilita 
 
 Proposta di sequenza aggiornata dopo la domanda sul passaggio a Gazebo (37.13):
 
-1. Timeout isolato di PoseVerifier senza movimenti: implementato e passato su ROS Jazzy in CI; comando WSL pronto.
-2. TCP nominale e modello MoveIt/TF: implementati e testati; resta il probe sul Panda della WSL, poi mantenere il riferimento coerente in Gazebo.
+1. Timeout isolato di PoseVerifier senza movimenti: concluso su ROS Jazzy in CI e WSL.
+2. TCP nominale e modello MoveIt/TF: conclusi anche sul Panda della WSL; mantenere il riferimento coerente in Gazebo.
 3. Gazebo Harmonic: caricamento del Panda, controller e primo movimento comandato da MoveIt con verifica degli stati.
 4. Tavolo/cubo fisico e scena coerente; pose esplicite, pinza, pre-presa e presa con contatti.
 5. Pipeline riutilizzabile e coordinatore: un ciclo completo di trasporto/deposito, poi tre oggetti.
