@@ -6711,3 +6711,88 @@ e https://gazebosim.org/docs/harmonic/install_ubuntu/; il comando --versions e
 documentato in https://gazebosim.org/docs/ionic/gui/ anche per distinguere
 installazioni Harmonic 8.x. Stato: inventario assegnato, output non ancora
 ricevuto; nessun pacchetto installato o file Gazebo scritto dall'assistente.
+
+## 41. Richiesta di unificazione prima di Gazebo
+
+**Ordine operativo definitivo:** la proposta iniziale di 41.1-41.2 e stata
+rivista e superata dalla decisione accettata in 41.3. Non anticipare la facciata
+completa al primo movimento Gazebo.
+
+Matteo chiede un unico accesso al progetto, con un semplice import o metodo
+analogo, prima dell'inventario Gazebo. Chiarimento ricevuto: desidera entrambe
+le cose, libreria riutilizzabile da uno script Python e avvio con un comando.
+Le verifiche di timeout/TCP gia concluse restano valide; l'inventario Gazebo
+di 40.8 segue la definizione di questa organizzazione.
+
+### 41.1 Architettura proposta, non ancora implementata
+
+1. Mantenere il pacchetto Python vision_sort_lab e i moduli separati.
+2. Aggiungere una facciata pubblica RoboCell, da esportare tramite __init__.py:
+   from vision_sort_lab import RoboCell. La classe riceve il nodo ROS
+   dell'applicazione e coordina i componenti; import e costruzione non inviano
+   movimenti. Inizializzazione ROS e spin restano espliciti nell'applicazione.
+3. Estrarre la pipeline di posa dall'esperimento PosePlanner: target esplicito,
+   pianificazione, controllo endpoint, MotionExecution, PoseVerifier e TCP.
+   Restituire un esito complessivo soltanto dopo la verifica della posa.
+4. Aggiungere bringup.launch.py per avviare in modo coordinato l'ambiente e
+   l'applicazione. Prima la demo mock; il backend Gazebo verra aggiunto quando
+   costruiremo il suo modello e i controllori. Il lancio iniziale predispone
+   l'ambiente e attende richieste di movimento esplicite.
+
+### 41.2 Perche serve un refactoring prima della facciata
+
+Revisione dei sorgenti pubblicati: PosePlanner crea un timer che costruisce
+automaticamente il target Z+0.03 m; plan_requested ne limita il riuso.
+MotionExecution usa execution_requested/completion_reported e PoseVerifier
+usa verification_started: sono componenti della singola operazione attuale.
+Esporre soltanto queste classi da __init__.py non crea una pipeline riutilizzabile.
+
+Il nuovo coordinamento dovra ammettere movimenti successivi quando libero,
+rifiutare sovrapposizioni, conservare target/campioni per l'operazione corrente,
+ignorare risposte tardive della precedente e consegnare un solo risultato.
+Non azzerare i flag mentre l'operazione precedente puo ancora essere attiva.
+Il timer Z+0.03 m rimane eventualmente nel dimostratore esplicito.
+
+Ordine proposto: pipeline richiamabile e riarmo controllato; facciata/import;
+launch e installazione dei relativi file; poi backend Gazebo. I comandi e gli
+import proposti non sono ancora disponibili: nessun nuovo sorgente Python o
+launch e stato scritto per questa richiesta. Il metodo resta quello guidato,
+con spiegazione delle API, implementazione e verifica incrementali; non viene
+estesa implicitamente la delega precedente dei soli due passi timeout/TCP.
+
+### 41.3 Decisione accettata: launch durante Gazebo, facciata dopo il primo movimento
+
+Matteo domanda se convenga unificare ora o dopo altri lavori. L'assistente
+rivede la proposta iniziale e Matteo accetta il nuovo ordine:
+
+1. Iniziare Gazebo con la pipeline di movimento attuale, sufficiente alla
+   prima traiettoria, verificando robot, controllori e stati simulati.
+2. Costruire l'avvio coordinato tramite launch durante l'integrazione Gazebo,
+   sui processi e parametri effettivamente necessari.
+3. Dopo il primo movimento MoveIt eseguito e verificato in Gazebo, rendere
+   riutilizzabile la pipeline ed esporre la facciata RoboCell.
+4. Avere questa interfaccia pronta prima che cresca la sequenza di presa e
+   deposito, poi procedere con manipolazione da pose note e visione.
+
+Il progetto e gia un pacchetto Python importabile. Facciata pubblica e launch
+unico restano obiettivi desiderati, ma non sono un prerequisito per avviare
+Gazebo. Non sono stati creati RoboCell, bringup.launch.py o nuovi backend per
+questa discussione. Da Gazebo riprende la scrittura personale guidata di Matteo.
+
+## 42. Passaggio alla prossima chat: inizio integrazione Gazebo
+
+Matteo richiede un messaggio lungo e dettagliato per la chat che aprira
+personalmente, e un titolo breve per la chat corrente. Nessuna nuova chat
+viene creata automaticamente. Titolo proposto: Vision Sort Lab - TCP verificato.
+
+Testo di ripresa in PROSSIMA-CHAT-GAZEBO.md nella cartella Windows del progetto.
+Conserva risultati WSL e CI, repository/workspace, classi esistenti, TCP,
+preferenze didattiche e decisione di 41.3. Punto iniziale operativo: leggere
+guida e sorgenti correnti, poi inventario Gazebo di 40.8, ancora senza output.
+Non rifare timeout, percorso positivo o prove concluse della scena.
+
+Stato GitHub verificato durante la preparazione: PR #1 e PR #2 entrambe unite
+su main; main al commit 54f7f818ca037792d9aab0f1f333dfcd007fb508. La PR #2 e
+solo documentazione. Le decisioni successive di 41 e questo passaggio sono
+un nuovo aggiornamento documentale. Codice eseguito nella WSL sempre quello
+del checkout 7554edb; nessun sorgente o test modificato per preparare il messaggio.
