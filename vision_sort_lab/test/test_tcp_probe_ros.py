@@ -51,6 +51,7 @@ class SyntheticRobot(Node):
         transform.transform.translation.x = 0.3
         transform.transform.translation.z = 0.6
         transform.transform.rotation.x = 1.0
+        transform.transform.rotation.w = 0.0
         self.broadcaster.sendTransform(transform)
 
     def fk(self, request, response):
@@ -63,6 +64,7 @@ class SyntheticRobot(Node):
             pose.header.frame_id = 'wrong_frame' if self.invalid_frame else 'panda_link0'
             pose.pose.position.x = 0.3
             pose.pose.position.z = 0.6
+            pose.pose.orientation.w = 0.0
             if link == 'panda_hand':
                 pose.pose.orientation.x = 1.0
             else:
