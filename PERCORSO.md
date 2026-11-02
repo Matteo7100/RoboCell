@@ -56,6 +56,12 @@ Proposta di sequenza aggiornata dopo la domanda sul passaggio a Gazebo (37.13):
 5. Pipeline riutilizzabile e coordinatore: un ciclo completo di trasporto/deposito, poi tre oggetti.
 6. Visione, recupero e metriche.
 
+Matteo desidera sia un import pubblico sia un comando unico. Ordine definitivo
+accettato in guida 41.3: launch durante l'integrazione Gazebo; facciata RoboCell
+e pipeline riutilizzabile dopo il primo movimento Gazebo verificato, prima
+della sequenza di presa/deposito. La proposta precedente di fare tutto prima
+di Gazebo e superata. API e launch proposti non ancora implementati.
+
 I dettagli funzionali di 37.3-37.11 restano validi, ma non sono tutti prerequisiti per iniziare Gazebo. Questi sono obiettivi futuri, non risultati acquisiti. Un oggetto collegato idealmente nella scena MoveIt non dimostra una presa fisica.
 
 | Ordine | Fase | Risultato da verificare |
@@ -74,6 +80,7 @@ La prima manipolazione usa coordinate note per isolare la pianificazione dalle i
 - Chat corrente: fase 6, prima posa pianificata, eseguita e verificata su dati aggiornati; checkpoint positivo 35.13.
 - Lavoro delegato proseguito in questa chat: verifiche/TCP pubblicati nella PR #1, comandi WSL in sezione 40; prossimo sviluppo Gazebo dopo la conferma locale. Nessuna nuova chat creata.
 - Conservare stato, file, prove eseguite e prossimo esercizio, mantenendo il metodo guidato.
+- Passaggio preparato in PROSSIMA-CHAT-GAZEBO.md e guida 42; la prossima chat verra aperta personalmente da Matteo.
 
 ## Riferimenti
 
