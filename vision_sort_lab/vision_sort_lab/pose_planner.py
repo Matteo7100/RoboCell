@@ -18,10 +18,16 @@ from moveit_msgs.srv import GetPositionFK, GetStateValidity
 
 from vision_sort_lab.motion_execution import MotionExecution
 from vision_sort_lab.pose_verifier import PoseVerifier
+from collections.abc import Callable
 
 
 class PosePlanner(Node):
-    def __init__(self):
+    def __init__(
+        self,
+        result_callback: Callable[[bool, str], None] | None = None,
+        *,
+        demo: bool = True,
+    ):
         super().__init__('pose_planner')
 
         self.tf_buffer = Buffer()
@@ -33,6 +39,7 @@ class PosePlanner(Node):
         self.plan_future = None
         self.planned_trajectory = None
         self.plan_requested = False
+        self.result_callback = result_callback
 
         self.fk_client = self.create_client(
             GetPositionFK, '/compute_fk'
@@ -60,52 +67,12 @@ class PosePlanner(Node):
             self,
             self.on_pose_verification_finished,
         )
-        self.plan_timer = self.create_timer(1.0, self.try_plan)
-
         self.tool_frame = 'panda_hand'
-
+        self.plan_timer = None
+        if demo:
+            self.plan_timer = self.create_timer(1.0, self.try_plan)
 #----------------------------------------------------#
-    def try_plan(self):
-        # ritornare se self.plan_requested è già vero;
-        if self.plan_requested:
-            return
-
-        # controllare self.plan_client.service_is_ready(): restituisce un 
-        # booleano senza attendere; se falso, ritornare e lasciare ritentare il timer;
-        if not rclpy.ok():
-            return
-
-        if not self.plan_client.service_is_ready():
-            self.get_logger().info('In attesa del servizio...')
-            return
-        if rclpy.ok():
-            self.get_logger().info(
-                'Servizio di pianificazione disponibile'    
-            )
-
-        if not self.fk_client.service_is_ready():
-            self.get_logger().info('In attesa del servizio...')
-            return
-        if rclpy.ok():
-            self.get_logger().info(
-                'Servizio di FK disponibile'    
-            )
-
-        if not self.validity_client.service_is_ready():
-            self.get_logger().info('In attesa del servizio...')
-            return
-        if rclpy.ok():
-            self.get_logger().info(
-                'Servizio di State Validitation disponibile'    
-            )
-    
-        if not self.motion_execution.is_ready():
-                self.get_logger().info(
-                    "In attesa dell'esecuzione..."
-                )
-                return
-
-        # acquisire TF con il try/except
+    def _build_demo_target(self) -> PoseStamped | None:
         try:
             transform = self.tf_buffer.lookup_transform(
                 'panda_link0', self.tool_frame, Time()
@@ -113,10 +80,9 @@ class PosePlanner(Node):
         except TransformException as exc:
             self.get_logger().info(
                 f"TF non ancora disponibile: {exc}"
-            )   
-            return
+            )
+            return None
 
-        # costruire e stampare il target;
         target = PoseStamped()
         target.header.frame_id = 'panda_link0'
 
@@ -127,12 +93,59 @@ class PosePlanner(Node):
         target.pose.orientation = deepcopy(
             transform.transform.rotation
         )
+        return target
+#----------------------------------------------------#
+    def request_pose(self, target: PoseStamped) -> bool:
 
-        position = target.pose.position
-        orientation = target.pose.orientation
+        if not rclpy.ok() or self.plan_requested or target.header.frame_id != 'panda_link0':
+            return False
+
+        if self.motion_execution.execution_uncertain:
+            self.get_logger().error("Stato dell'ultima esecuzione incerto")
+            return False
+
+        if not self.plan_client.service_is_ready():
+            self.get_logger().info('In attesa del servizio...')
+            return False
+        if rclpy.ok():
+            self.get_logger().info(
+                'Servizio di pianificazione disponibile'
+            )
+
+        if not self.fk_client.service_is_ready():
+            self.get_logger().info('In attesa del servizio...')
+            return False
+        if rclpy.ok():
+            self.get_logger().info(
+                'Servizio di FK disponibile'
+            )
+
+        if not self.validity_client.service_is_ready():
+            self.get_logger().info('In attesa del servizio...')
+            return False
+        if rclpy.ok():
+            self.get_logger().info(
+                'Servizio di State Validitation disponibile'
+            )
+
+        if not self.motion_execution.is_ready():
+            self.get_logger().info(
+                "In attesa dell'esecuzione..."
+            )
+            return False
+
+        target_snapshot = deepcopy(target)
+        request = build_pose_plan_request(target_snapshot, self.tool_frame)
+
+        target_constraints_snapshot = deepcopy(
+            request.motion_plan_request.goal_constraints[0]
+        )
+
+        position = target_snapshot.pose.position
+        orientation = target_snapshot.pose.orientation
 
         self.get_logger().info(
-            f'Target panda_hand in {target.header.frame_id}: '
+            f'Target panda_hand in {target_snapshot.header.frame_id}: '
             f'pos=({position.x:.4f}, '
             f'{position.y:.4f}, '
             f'{position.z:.4f}) m | '
@@ -141,29 +154,76 @@ class PosePlanner(Node):
             f'{orientation.z:.6f}, '
             f'{orientation.w:.6f})'
         )
-        
-        # inviare una sola richiesta:
-        request = build_pose_plan_request(target, self.tool_frame)
-        # la verifica deve usare il riferimento dell’operazione corrente.
-        self.target_pose = deepcopy(target)
-        self.target_constraints = deepcopy(
-            request.motion_plan_request.goal_constraints[0]
-        )
 
-        self.plan_future = self.plan_client.call_async(request)
+        try:
+            future = self.plan_client.call_async(request)
+        except Exception as exc:
+            self.get_logger().error(
+                f"Invio della richiesta di pianificazione fallito: {exc}"
+            )
+            return False
+        self.planned_trajectory = None
+        self.endpoint_state = None
+        self.fk_future = None
+        self.validity_future = None
+        self.endpoint_position_ok = False
+        self.endpoint_verified = False
+        self.execution_succeeded = False
+        self.pose_verified = False
+        self.target_constraints = target_constraints_snapshot
+        self.plan_future = future
+        self.target_pose = target_snapshot
         self.plan_requested = True
-        self.plan_timer.cancel()
-        self.plan_future.add_done_callback(self.on_plan_response)
+        future.add_done_callback(self.on_plan_response)
+        return True
+#----------------------------------------------------#
+    def try_plan(self) -> None:
+        if self.plan_timer is None or self.plan_requested:
+            return
+
+        if not rclpy.ok():
+            return
+
+        target = self._build_demo_target()
+        if target is None:
+            return
+        submitted = self.request_pose(target)
+        if submitted:
+            self.plan_timer.cancel()
+#----------------------------------------------------#
+    def _finish_request(self, succeeded: bool, reason: str) -> None:
+        if not self.plan_requested:
+            return
+        self.plan_requested = False
+        self.plan_future = None
+        self.fk_future = None
+        self.validity_future = None
+        message = f'Esito richiesta posa | riuscita={succeeded} | motivo={reason}'
+        logger = self.get_logger()
+
+        if succeeded:
+            logger.info(message)
+        else:
+            logger.error(message)
+
+        if self.result_callback is not None:
+            self.result_callback(succeeded, reason)
 #----------------------------------------------------#
     def on_plan_response(self, future):
-        self.planned_trajectory = None
+        if not self.plan_requested or future is not self.plan_future:
+            return
+        self.plan_future = None
 
         try:
             response = future.result()
         except Exception as exc:
-            self.get_logger().error(
-                f'Errore nel recupero della risposta: {exc}'
+            self._finish_request(
+                False, f'Errore nella risposta di pianificazione: {exc}'
             )
+            return
+
+        if response is None:
+            self._finish_request(False, 'Risposta di pianificazione vuota')
             return
 
         result = response.motion_plan_response
@@ -171,7 +231,7 @@ class PosePlanner(Node):
         error_name = describe_moveit_error(error_code)
 
         if error_code != MoveItErrorCodes.SUCCESS:
-            self.get_logger().error(
+            self._finish_request(False,
                 f'Pianificazione fallita: {error_name} ({error_code})'
             )
             return
@@ -179,7 +239,7 @@ class PosePlanner(Node):
         points = result.trajectory.joint_trajectory.points
 
         if not points:
-            self.get_logger().error(
+            self._finish_request(False,
                 'Ricevuto SUCCESS, ma la traiettoria è vuota'
             )
             return
@@ -195,12 +255,10 @@ class PosePlanner(Node):
     def request_endpoint_fk(self):
         trajectory = self.planned_trajectory.joint_trajectory
         self.endpoint_position_ok = False
-        self.endpoint_verified = False  
+        self.endpoint_verified = False
 
         if not trajectory.points:
-            self.get_logger().error(
-                'La traiettoria non contiene punti'
-            )
+            self._finish_request(False, 'La traiettoria non contiene punti')
             return
 
         last_point = trajectory.points[-1]
@@ -209,7 +267,7 @@ class PosePlanner(Node):
         joint_positions = list(last_point.positions)
 
         if len(joint_positions) != len(joint_names):
-            self.get_logger().warning(
+            self._finish_request(False,
                 'Nomi e posizioni hanno lunghezze diverse'
             )
             return
@@ -219,11 +277,11 @@ class PosePlanner(Node):
         }
 
         if len(joint_names) != 7 or set(joint_names) != expected_names:
-            self.get_logger().error(
+            self._finish_request(False,
                 f'Nomi dei giunti inattesi: {joint_names}'
             )
             return
-        
+
         request = GetPositionFK.Request()
         request.header.frame_id = self.target_pose.header.frame_id
         request.fk_link_names = [self.tool_frame]
@@ -233,50 +291,60 @@ class PosePlanner(Node):
         request.robot_state.joint_state.position = joint_positions
 
         self.endpoint_state = deepcopy(request.robot_state)
+        try:
+            self.fk_future = self.fk_client.call_async(request)
+        except Exception as exc:
+            self._finish_request(False, f'Invio della richiesta FK fallito: {exc}')
+            return
 
-        self.fk_future = self.fk_client.call_async(request)
         self.fk_future.add_done_callback(self.on_fk_response)
 #----------------------------------------------------#
     def on_fk_response(self, future):
+        if not self.plan_requested or future is not self.fk_future:
+            return
+        self.fk_future = None
+
         try:
             response = future.result()
         except Exception as exc:
-            self.get_logger().error(
-                f"Errore nel recupero della risposta: {exc}"
-            )
-            return 
-                
-        if response.error_code.val != MoveItErrorCodes.SUCCESS:
-            error_code = response.error_code.val
+            self._finish_request(False, f'Errore nella risposta FK: {exc}')
+            return
+        if response is None:
+            self._finish_request(False, 'Risposta FK vuota')
+            return
+
+        error_code = response.error_code.val
+
+        if error_code != MoveItErrorCodes.SUCCESS:
             error_name = describe_moveit_error(error_code)
-            self.get_logger().error(
-                f"Calcolo FK fallito: {error_name} {error_code}"
+            self._finish_request(
+                False, f'Calcolo FK fallito: {error_name} ({error_code})'
             )
             return
-        
+
         if (
             len(response.fk_link_names) != 1
             or len(response.pose_stamped) != 1
         ):
-            self.get_logger().error(
-                'Risposta FK con dimensioni inattese'
-                )
+            self._finish_request(False, 'Risposta FK con dimensioni inattese')
             return
 
         returned_link = response.fk_link_names[0]
         predicted = response.pose_stamped[0]
 
         if returned_link != self.tool_frame:
-            self.get_logger().error(
-                f'Link inatteso: ricevuto {returned_link}, '
-                f'atteso {self.tool_frame}'
+            self._finish_request(
+                False,
+                f'Link inatteso: ricevuto {returned_link}, atteso {self.tool_frame}',
             )
             return
 
-        if predicted.header.frame_id != self.target_pose.header.frame_id:
-            self.get_logger().error(
+        expected_frame = self.target_pose.header.frame_id
+        if predicted.header.frame_id != expected_frame:
+            self._finish_request(
+                False,
                 f'Frame inatteso: ricevuto {predicted.header.frame_id}, '
-                f'atteso {self.target_pose.header.frame_id}'
+                f'atteso {expected_frame}',
             )
             return
 
@@ -314,22 +382,31 @@ class PosePlanner(Node):
         request.group_name = ''
         request.constraints = deepcopy(self.target_constraints)
 
-        self.validity_future = self.validity_client.call_async(request)
-        self.validity_future.add_done_callback(
-            self.on_endpoint_validity_response
-        )
+        try:
+            self.validity_future = self.validity_client.call_async(request)
+        except Exception as exc:
+            self._finish_request(
+                False, f'Invio della richiesta di validità fallito: {exc}'
+            )
+            return
+
+        self.validity_future.add_done_callback(self.on_endpoint_validity_response)
 #----------------------------------------------------#
     def on_endpoint_validity_response(self, future):
-        # Se lo stato contiene una collisione o non soddisfa i vincoli inviati, 
+        if not self.plan_requested or future is not self.validity_future:
+            return
+        self.validity_future = None
+
+        # Se lo stato contiene una collisione o non soddisfa i vincoli inviati,
         # il servizio può rispondere normalmente con valid = False
         try:
             response = future.result()
         except Exception as exc:
-            self.get_logger().error(
-                f'Errore nel recupero della risposta di validità: {exc}'
-            )
-            return 
-
+            self._finish_request(False, f'Errore nella risposta di validità: {exc}')
+            return
+        if response is None:
+            self._finish_request(False, 'Risposta di validità vuota')
+            return
         if response.valid:
             self.get_logger().info(
                 "Lo stato finale supera la verifica di validità"
@@ -339,12 +416,8 @@ class PosePlanner(Node):
                 "Lo stato finale non supera la verifica di validità"
             )
 
-        results = response.constraint_result
-
-        constraints_ok = (
-            len(results) == 2
-            and all(item.result for item in results)
-        )
+        results = [item.result for item in response.constraint_result]
+        constraints_ok = len(results) == 2 and all(results)
 
         self.endpoint_verified = (
             response.valid
@@ -354,28 +427,26 @@ class PosePlanner(Node):
 
         message = (
             f'Validità dello stato: {response.valid} | '
-            f'Vincoli: {[item.result for item in results]} | '
+            f'Vincoli: {results} | '
             f'Numero di contatti: {len(response.contacts)} | '
+            f'Posizione entro 5 mm: {self.endpoint_position_ok} | '
             f'Verifica endpoint: {self.endpoint_verified}'
         )
-
-        if self.endpoint_verified:
-            self.get_logger().info(message)
-            submitted = self.motion_execution.request_execution(self.planned_trajectory)
-            if not submitted:
-                self.get_logger().error(
-                    "Non è stato avviato un nuovo invio della traiettoria"
-                )
-        else:
-            self.get_logger().error(message)
+        if not self.endpoint_verified:
+            self._finish_request(False, f'Verifica endpoint fallita. {message}')
+            return
+        self.get_logger().info(message)
+        submitted = self.motion_execution.request_execution(self.planned_trajectory)
+        if not submitted:
+            self._finish_request(False, 'Invio della traiettoria non avviato')
 #----------------------------------------------------#
     def on_execution_finished(self, succeeded):
+        if not self.plan_requested:
+            return
         self.execution_succeeded = succeeded
 
         if not succeeded:
-            self.get_logger().error(
-                'Esecuzione non riuscita: verifica della posa non avviata'
-            )
+            self._finish_request(False, 'Esecuzione della traiettoria fallita')
             return
 
         self.get_logger().info('Esecuzione conclusa con successo')
@@ -387,29 +458,26 @@ class PosePlanner(Node):
         )
 
         if not started:
-            self.get_logger().error(
-                'Non è stato possibile avviare la verifica della posa'
-            )
+            self._finish_request(False, 'Avvio della verifica della posa fallito')
 #----------------------------------------------------#
     def on_pose_verification_finished(self, succeeded):
+        if not self.plan_requested:
+            return
         self.pose_verified = succeeded
 
         if succeeded:
-            self.get_logger().info(
-                'Verifica della posa conclusa con successo'
-            )
+            self._finish_request(True, 'Verifica della posa conclusa con successo')
         else:
-            self.get_logger().error(
-                'Verifica della posa conclusa con esito negativo'
-            )
+            self._finish_request(False, 'Verifica della posa conclusa con esito negativo')
 
 
 
 def main(args=None):
     pose_planner = None
+
     rclpy.init(args=args)
-    try: 
-        pose_planner = PosePlanner()   
+    try:
+        pose_planner = PosePlanner()
         rclpy.spin(pose_planner)
     except KeyboardInterrupt:
         pass

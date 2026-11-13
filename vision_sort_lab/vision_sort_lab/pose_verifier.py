@@ -24,11 +24,10 @@ class PoseVerifier():
         self.sampled_state = None
         self.sample_stamp_ns = None
         self.fk_future = None
-        self.validity_future = None	
+        self.validity_future = None
         self.verification_start_ns = None
-        self.start_steady_ns = None	
-        self.verification_started = False
-        self.verification_pending = False	
+        self.start_steady_ns = None
+        self.verification_pending = False
         self.sample_captured = False
         self.position_ok = False
         self.timeout_sec = 2.0
@@ -51,6 +50,9 @@ class PoseVerifier():
 
         self.verification_pending = False
         self.verification_timer.cancel()
+        self.fk_future = None
+        self.validity_future = None
+
         if succeeded is True:
             self.node.get_logger().info(
                 message
@@ -71,8 +73,8 @@ class PoseVerifier():
         else:
             return False
 # -----------------------------------------------------------#
-    def start(self, target_pose, target_constraints, tool_frame):
-        if self.verification_started is True:
+    def start(self, target_pose, target_constraints, tool_frame) -> bool:
+        if self.verification_pending:
             self.node.get_logger().info(
                 "Verifica già in corso"
             )
@@ -91,13 +93,19 @@ class PoseVerifier():
             self.node.get_logger().error(
                 "La posa non specifica il frame di riferimento: la stringa è vuota"
             )
-            return False            
+            return False
         if not tool_frame:
             self.node.get_logger().error(
                 "Non è specificato il link da verificare: la stringa è vuota"
             )
             return False
 
+        self.sampled_state = None
+        self.sample_stamp_ns = None
+        self.fk_future = None
+        self.validity_future = None
+        self.sample_captured = False
+        self.position_ok = False
         self.target_pose = deepcopy(target_pose)
         self.target_constraints = deepcopy(target_constraints)
         self.tool_frame = tool_frame
@@ -106,7 +114,6 @@ class PoseVerifier():
         self.start_steady_ns = self.steady_clock.now().nanoseconds
 
         self.verification_pending = True
-        self.verification_started = True
         self.verification_timer.reset()
         self.node.get_logger().info(
             "verifica avviata"
@@ -140,7 +147,7 @@ class PoseVerifier():
         positions_by_name = dict(zip(msg.name, msg.position))
         joint_names = list(self.expected_joint_names)
         joint_positions = [positions_by_name[name] for name in joint_names]
-        if not all(math.isfinite(value) for value in joint_positions):            
+        if not all(math.isfinite(value) for value in joint_positions):
             self.node.get_logger().error(
                 "numero di joint infinito"
             )
@@ -149,7 +156,7 @@ class PoseVerifier():
             return
         if not self.validity_client.service_is_ready():
             return
-        
+
         request = GetPositionFK.Request()
         request.header.frame_id = self.target_pose.header.frame_id
         request.fk_link_names = [self.tool_frame]
@@ -185,6 +192,7 @@ class PoseVerifier():
         if self.check_timeout():
             return
 
+        self.fk_future = None
         try:
             response = future.result()
         except Exception as exc:
@@ -294,6 +302,7 @@ class PoseVerifier():
         if self.check_timeout():
             return
 
+        self.validity_future = None
         try:
             response = future.result()
         except Exception as exc:

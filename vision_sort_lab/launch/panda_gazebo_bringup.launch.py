@@ -1,5 +1,5 @@
-from launch import LaunchDescription
-from launch.actions import ExecuteProcess
+from launch import Action, LaunchDescription
+from launch.actions import ExecuteProcess, IncludeLaunchDescription
 from launch_ros.actions import Node
 
 from pathlib import Path
@@ -10,6 +10,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 from launch.actions import RegisterEventHandler
 from launch.event_handlers import OnProcessExit
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description()-> LaunchDescription:
     gazebo = ExecuteProcess(
@@ -69,4 +70,27 @@ def generate_launch_description()-> LaunchDescription:
         OnProcessExit(target_action=spawn_joint_states, on_exit=start_arm_after_broadcaster)
     )
 
-    return LaunchDescription([gazebo, clock_bridge, state_publisher, spawn_panda, arm_after_broadcaster, spawn_joint_states])
+    moveit_launch_path = package_dir / "launch" / "panda_gazebo_move_group.launch.py"
+    include_moveit = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(str(moveit_launch_path)),
+        launch_arguments={"urdf_file": str(xacro_path)}.items(),
+    )
+
+    def start_moveit_after_arm(event, context) -> list[Action]:
+        if context.is_shutdown or event.returncode != 0:
+            return []
+        return [include_moveit]
+
+    moveit_after_arm = RegisterEventHandler(
+        OnProcessExit(target_action=spawn_arm, on_exit=start_moveit_after_arm)
+    )
+
+    return LaunchDescription([
+        gazebo,
+        clock_bridge,
+        state_publisher,
+        spawn_panda,
+        arm_after_broadcaster,
+        moveit_after_arm,
+        spawn_joint_states,
+    ])
