@@ -2,7 +2,7 @@ name: ROS Jazzy verification
 
 on:
   push:
-    branches: [main, codex/verification-tcp]
+    branches: [main]
     paths:
       - 'vision_sort_lab/**'
       - 'docs/robot_reference/**'
