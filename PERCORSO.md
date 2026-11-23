@@ -1,6 +1,6 @@
 # Vision Sort Lab - percorso guidato
 
-Ultimo aggiornamento: 2 novembre 2026.
+Questa mappa documenta il checkpoint MoveIt del 2 novembre 2026. Per la cella Gazebo e le misure sui pezzi, consulta la [percezione RGB-D e i comandi di avvio](README.md#percezione-rgb-d).
 
 Guida principale con esercizi, codice discusso e risultati: [GUIDA-PROGETTO.md](GUIDA-PROGETTO.md). Il recap delle prossime fasi si trova nella sezione 27.
 
