@@ -1,5 +1,6 @@
 from launch import Action, LaunchDescription
-from launch.actions import ExecuteProcess, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 from pathlib import Path
@@ -13,10 +14,12 @@ from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 def generate_launch_description()-> LaunchDescription:
+    package_dir = Path(__file__).resolve().parent.parent
+    world_path = package_dir / "worlds" / "sort_lab.sdf"
     gazebo = ExecuteProcess(
-        cmd=["gz", "sim", "-r", "-v", "3", "empty.sdf"],
+        cmd=["gz", "sim", "-r", "-v", "3", LaunchConfiguration("world_file")],
         output="screen"
-    )
+    )    
     clock_bridge = Node(
         package="ros_gz_bridge",
         executable="parameter_bridge",
@@ -41,8 +44,9 @@ def generate_launch_description()-> LaunchDescription:
         package="ros_gz_sim",
         executable="create",
         output="screen",
-        arguments=["-world", "empty", "-topic", "/robot_description", "-name", "panda"]
+        arguments=["-world", "sort_lab", "-topic", "/robot_description", "-name", "panda"]
     )
+
 
     share_dir = get_package_share_directory("moveit_resources_panda_moveit_config")
     controllers_yaml = Path(share_dir) / "config" / "ros2_controllers.yaml"
@@ -60,6 +64,13 @@ def generate_launch_description()-> LaunchDescription:
         arguments = ["panda_arm_controller", "-c", "/controller_manager", "--controller-manager-timeout", "15", "--param-file", str(controllers_yaml)]
     )
 
+    spawn_hand = Node(
+        package = "controller_manager",
+        executable = "spawner",
+        output = "screen",
+        arguments = ["panda_hand_controller", "-c", "/controller_manager", "--controller-manager-timeout", "15", "--param-file", str(controllers_yaml)]
+    )
+
     def start_arm_after_broadcaster(event, context) -> list[Node]:
             if context.is_shutdown or event.returncode != 0:
                 return []
@@ -75,22 +86,39 @@ def generate_launch_description()-> LaunchDescription:
         PythonLaunchDescriptionSource(str(moveit_launch_path)),
         launch_arguments={"urdf_file": str(xacro_path)}.items(),
     )
+    
+    def start_hand_after_arm(event, context) -> list[Action]:
+        if context.is_shutdown or event.returncode != 0:
+            return []
+        return [spawn_hand]
 
-    def start_moveit_after_arm(event, context) -> list[Action]:
+    def start_moveit_after_hand(event, context) -> list[Action]:
         if context.is_shutdown or event.returncode != 0:
             return []
         return [include_moveit]
 
-    moveit_after_arm = RegisterEventHandler(
-        OnProcessExit(target_action=spawn_arm, on_exit=start_moveit_after_arm)
+    hand_after_arm = RegisterEventHandler(
+        OnProcessExit(
+            target_action=spawn_arm,
+            on_exit=start_hand_after_arm,
+        )
+    )
+
+    moveit_after_hand = RegisterEventHandler(
+        OnProcessExit(
+            target_action=spawn_hand,
+            on_exit=start_moveit_after_hand,
+        )
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument("world_file", default_value=str(world_path)),
         gazebo,
         clock_bridge,
         state_publisher,
         spawn_panda,
         arm_after_broadcaster,
-        moveit_after_arm,
+        hand_after_arm,
+        moveit_after_hand,
         spawn_joint_states,
     ])

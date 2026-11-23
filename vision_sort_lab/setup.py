@@ -34,6 +34,7 @@ setup(
         'timeout_probe = vision_sort_lab.timeout_probe:main',
         'robot_reference = vision_sort_lab.robot_reference:main',
         'tcp_probe = vision_sort_lab.tcp_probe:main',
+        'red_image_probe = vision_sort_lab.red_image_probe:main',
        ],
     },
 )
