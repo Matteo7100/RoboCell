@@ -53,6 +53,14 @@ def build_box_object(object_id, dimensions, center):
     return new_box
 #----------------------------------------#
 
+def  build_first_cube_object() -> CollisionObject:
+        return build_box_object(
+            'piece_red_1',
+            [0.04, 0.04, 0.04],
+            (0.45, -0.20, 0.02),
+        )
+#----------------------------------------#
+
 def build_sorting_objects():
     objects = []
 

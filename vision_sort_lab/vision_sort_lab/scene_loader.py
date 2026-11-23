@@ -7,10 +7,12 @@ from vision_sort_lab.scene_builders import build_object_color
 from vision_sort_lab.scene_builders import build_bin_object
 from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
+from vision_sort_lab.scene_builders import build_first_cube_object
 
 class SceneLoader(Node):
     def __init__(self):
         super().__init__('scene_loader')
+        self.declare_parameter('single_cube', False)
         self.scene_client = self.create_client(ApplyPlanningScene,'/apply_planning_scene')
 
         while rclpy.ok() and not (self.scene_client.wait_for_service(timeout_sec=1.0)):
@@ -26,12 +28,7 @@ class SceneLoader(Node):
 #----------------------------------------#
 
     def apply_scene(self):
-
-        mesh_path = (
-            Path(get_package_share_directory('vision_sort_lab'))
-            / 'meshes'
-            / 'open_bin.stl'
-        )      
+            
         request = ApplyPlanningScene.Request()
 
         request.scene.is_diff = True
@@ -40,39 +37,49 @@ class SceneLoader(Node):
         request.scene.world.collision_objects.append(
             build_table_object()
         )
-        request.scene.world.collision_objects.extend(
-            build_sorting_objects()
-        )
         request.scene.object_colors.append(
             build_object_color('piece_red_1', 1.0, 0.0, 0.0)
         )
-        request.scene.object_colors.append(
-            build_object_color('piece_red_2', 1.0, 0.0, 0.0)
-        )
-        request.scene.object_colors.append(
-            build_object_color('piece_blue_1', 0.0, 0.0, 1.0)
-        )
+        if self.get_parameter('single_cube').value:
+            request.scene.world.collision_objects.append(
+                build_first_cube_object()
+            )
+        else:
+            mesh_path = (
+                Path(get_package_share_directory('vision_sort_lab'))
+                / 'meshes'
+                / 'open_bin.stl'
+            )
+            request.scene.world.collision_objects.extend(
+                build_sorting_objects()
+            )
+            request.scene.object_colors.append(
+                build_object_color('piece_red_2', 1.0, 0.0, 0.0)
+            )
+            request.scene.object_colors.append(
+                build_object_color('piece_blue_1', 0.0, 0.0, 1.0)
+            )
 
-        request.scene.world.collision_objects.append(
-            build_bin_object(
-                'bin_red',
-                (0.75, -0.22, 0.0),
-                mesh_path,
+            request.scene.world.collision_objects.append(
+                build_bin_object(
+                    'bin_red',
+                    (0.75, -0.22, 0.0),
+                    mesh_path,
+                )
             )
-        )
-        request.scene.object_colors.append(
-            build_object_color('bin_red', 1.0, 0.0, 0.0)
-        )
-        request.scene.world.collision_objects.append(
-            build_bin_object(
-                'bin_blue',
-                (0.75, 0.22, 0.0),
-                mesh_path,
+            request.scene.object_colors.append(
+                build_object_color('bin_red', 1.0, 0.0, 0.0)
             )
-        )
-        request.scene.object_colors.append(
-            build_object_color('bin_blue', 0.0, 0.0, 1.0)
-        )
+            request.scene.world.collision_objects.append(
+                build_bin_object(
+                    'bin_blue',
+                    (0.75, 0.22, 0.0),
+                    mesh_path,
+                )
+            )
+            request.scene.object_colors.append(
+                build_object_color('bin_blue', 0.0, 0.0, 1.0)
+            )
 
         self.scene_future = self.scene_client.call_async(request)
         
